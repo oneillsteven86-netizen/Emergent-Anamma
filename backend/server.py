@@ -159,6 +159,14 @@ class CoachIn(BaseModel):
     photo: Optional[str] = ""
     permissions: Dict[str, bool] = {}
 
+class MemberCreateIn(BaseModel):
+    name: str
+    email: EmailStr
+    password: Optional[str] = None
+    phone: Optional[str] = None
+    plan_id: Optional[str] = None
+    mark_paid: bool = False
+
 class UserUpdateIn(BaseModel):
     name: Optional[str] = None
     status: Optional[str] = None
@@ -377,6 +385,48 @@ async def promote_admin(user_id: str, admin=Depends(require_admin)):
     await db.users.update_one({"id": user_id}, {"$set": {"role": "admin"}})
     await notify(user_id, "Admin access granted", "You are now an admin of ANAM MMA.", "role")
     return {"ok": True}
+
+
+@api.post("/users/member")
+async def create_member(body: MemberCreateIn, bg: BackgroundTasks, user=Depends(require_perm("manage_members"))):
+    """Front-desk (cash-friendly) member creation: account + optional plan + optional cash payment in one go."""
+    if await db.users.find_one({"email": body.email.lower()}):
+        raise HTTPException(400, "Email already registered")
+    temp_password = body.password or f"Anam{str(uuid.uuid4())[:6]}"
+    member = {
+        "id": new_id(), "name": body.name, "email": body.email.lower(),
+        "password_hash": pwd.hash(temp_password), "phone": body.phone or "",
+        "role": "member", "status": "active",
+        "waiver_accepted": False, "waiver_version": None, "waiver_accepted_at": None,
+        "emergency_contact_name": "", "emergency_contact_phone": "", "medical_notes": "",
+        "admin_notes": "Added at front desk", "permissions": {}, "bio": "", "photo": "",
+        "deletion_requested": False, "created_at": now_iso(),
+    }
+    await db.users.insert_one(member)
+    member.pop("password_hash")
+    member.pop("_id", None)
+    subscription = None
+    if body.plan_id:
+        plan = await db.plans.find_one({"id": body.plan_id}, {"_id": 0})
+        if not plan:
+            raise HTTPException(404, "Plan not found")
+        start = today_str()
+        end = (date_cls.fromisoformat(start) + timedelta(days=plan["duration_days"])).isoformat()
+        subscription = {
+            "id": new_id(), "user_id": member["id"], "user_name": member["name"], "plan_id": plan["id"],
+            "plan_name": plan["name"], "plan_type": plan["type"], "price": plan["price"],
+            "start_date": start, "end_date": end, "status": "pending_payment",
+            "sessions_remaining": plan.get("sessions"), "reminder_sent": False,
+            "frozen_at": None, "created_at": now_iso(),
+        }
+        await db.subscriptions.insert_one(subscription)
+        subscription.pop("_id", None)
+        if body.mark_paid:
+            subscription = await _mark_paid(subscription["id"], bg)
+    bg.add_task(send_email_task, member["email"], "Welcome to ANAM MMA",
+                f"<h2>Welcome to ANAM MMA, {body.name}!</h2><p>Your account is ready. "
+                f"Log in with this email and your password{' (temporary: ' + temp_password + ')' if not body.password else ''}.</p>")
+    return {"user": member, "temp_password": temp_password, "subscription": subscription}
 
 
 @api.post("/users/coach")

@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 2 (cash-friendly front-desk + timetable WEEK view) - FULL PASS. Backend: 11/11 new pytest cases PASS in /app/backend/tests/test_iteration2_member_creation.py covering POST /api/users/member (with plan+cash -> active sub + cash payment + temp_password that works for login; without plan -> just user; duplicate email -> 400; member token -> 403; plan but mark_paid=false -> pending_payment) and POST /api/subscriptions mark_paid=true (immediately active + cash payment record) vs default (pending_payment). Existing 38 tests still untouched. Frontend (390x844): admin login -> Timetable defaults to WEEK view with day groups MONDAY..SUNDAY each with ADD button; tapping a week-class row opens edit sheet with day/time/duration chips + capacity +/- stepper + coach chips (no typing required); capacity-plus persists - MMA Fundamentals jumped from cap 20 -> cap 22 after one + press + save; DAY/WEEK toggle works (DAY view shows 14-day date tape + class cards with capacity bars); added brand new class via add-class-sunday button (TEST Sunday ...) and 'Class added to timetable' toast confirmed; Members tab: add-member-button opens sheet, filled name+email, picked plan chip, cash-received toggle on by default, CREATE MEMBER -> member-created-box shows temp password + 'Unlimited Monthly — PAID ✓ (cash)' + SHARE LOGIN DETAILS + ADD ANOTHER + DONE; new member appears in list with ACTIVE badge + plan + until date; 'Unpaid' filter chip shows €DUE members with pending_payment; member detail sheet for unpaid member shows quick '€ MARK CASH PAID — Unlimited Monthly (€80)' button + lower MARK CASH PAID row + SELL/RENEW PLAN (CASH) flow. Member booking sanity green (existing member can still view schedule and book - covered by existing regression). No red screens; no new console errors; previous deprecated-pointerEvents and react-native-keyboard-controller version warnings still present from iter 1 (not new).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-keyboard-controller", "issue": "Still on 1.18.6 vs Expo expected 1.18.5 (carried over from iter 1, non-blocking)"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2_member_creation.py",
+    "/app/backend/tests/test_anam_mma_api.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POST /api/users/member uses pwd.hash() + db.users.insert_one synchronously then immediately calls bg.add_task for email -- good. However it accepts mark_paid without checking plan_id is also set; current logic ignores mark_paid silently when plan_id is null (acceptable but undocumented).",
+    "Both POST /api/users/member and POST /api/subscriptions share a /_mark_paid helper -- good DRY. Receipt number format ANAM-YYYYMMDD-XXXXXX is consistent.",
+    "timetable.tsx WeekView uses FULL_DAYS labels (Monday..Sunday) for testIDs (`add-class-sunday`); the original problem statement said 'Sun ADD button' which could mislead test scripts -- testID is the long form. Worth documenting.",
+    "members.tsx add-member sheet has cash-received-toggle defaulting to true (correct UX for cash-at-desk). No client-side validation of email format; backend does via EmailStr -- ok but could surface earlier."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2_member_creation.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11 new + 38/38 existing untouched)", "frontend": "100% of iter2 critical flows (WEEK view, edit-class, DAY toggle, add Sunday class, cash member creation, Unpaid filter, mark cash paid quick action)"},
+  "seed_data_creation": "Created TEST_ cash members (test_cash_*, test_noplan_*, test_due_*, test_subdefault_*) + 1 new TEST Sunday class via frontend add-class-sunday. All TEST_-prefixed for easy cleanup. MMA Fundamentals capacity bumped from 20 -> 22 during edit-flow test (visible in screenshots).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Day group ADD buttons use testID `add-class-monday`..`add-class-sunday` (full lowercase day name, not 3-letter). New backend test file /app/backend/tests/test_iteration2_member_creation.py is self-contained (own admin login + own member fixtures) and safe to re-run idempotently. The MMA Fundamentals seeded class capacity may now read 22 (was 20) due to edit-flow UI test - if a future test asserts 20, that's expected drift not a defect.",
+  "rca_of_issue": "No bugs found."
+}

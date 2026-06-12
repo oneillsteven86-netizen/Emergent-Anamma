@@ -10,6 +10,12 @@ import { Btn, Input, EmptyState, CapacityBar, Sheet, useToast, Badge } from "@/s
 import { C, SP, R, F, DAYS } from "@/src/theme";
 
 const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const FULL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const TIME_SLOTS = Array.from({ length: 32 }, (_, i) => {
+  const h = Math.floor(i / 2) + 6;
+  return `${String(h).padStart(2, "0")}:${i % 2 ? "30" : "00"}`;
+});
+const DURATIONS = [30, 45, 60, 75, 90, 120];
 
 function next14Days() {
   const out: { date: string; day: string; num: string }[] = [];
@@ -27,8 +33,12 @@ export default function Timetable() {
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const days = useMemo(next14Days, []);
+  const canManage = user?.role === "admin" || user?.permissions?.manage_timetable;
+
+  const [view, setView] = useState<"day" | "week">(canManage ? "week" : "day");
   const [date, setDate] = useState(days[0].date);
   const [classes, setClasses] = useState<any[]>([]);
+  const [weekClasses, setWeekClasses] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [detail, setDetail] = useState<any>(null);
@@ -36,18 +46,18 @@ export default function Timetable() {
   const [form, setForm] = useState<any>({});
   const [busy, setBusy] = useState<string | null>(null);
 
-  const canManage = user?.role === "admin" || user?.permissions?.manage_timetable;
-
   const load = useCallback(async (d: string) => {
     try {
-      setClasses(await api(`/schedule?date=${d}`));
+      const [sched, all, co] = await Promise.all([api(`/schedule?date=${d}`), api("/classes"), api("/coaches")]);
+      setClasses(sched);
+      setWeekClasses(all);
+      setCoaches(co);
     } catch {}
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       load(date);
-      api("/coaches").then(setCoaches).catch(() => {});
     }, [date, load]),
   );
 
@@ -77,17 +87,21 @@ export default function Timetable() {
     }
   };
 
-  const openEdit = (c?: any) => {
+  const openEdit = (c?: any, dayIdx?: number) => {
+    setDetail(null);
     setForm(
       c
         ? { ...c }
-        : { name: "", description: "", day_of_week: new Date(date + "T00:00:00").getDay() === 0 ? 6 : new Date(date + "T00:00:00").getDay() - 1, start_time: "18:00", duration_min: 60, room: "Main Mat", capacity: 20, coach_id: coaches[0]?.id },
+        : {
+            name: "", description: "", day_of_week: dayIdx ?? 0, start_time: "18:00",
+            duration_min: 60, room: "Main Mat", capacity: 20, coach_id: coaches[0]?.id,
+          },
     );
     setEditOpen(true);
   };
 
   const saveClass = async () => {
-    if (!form.name || !form.start_time) return toast.show("Name and start time required", "error");
+    if (!form.name) return toast.show("Class name required", "error");
     try {
       const body = {
         name: form.name, description: form.description || "", day_of_week: Number(form.day_of_week),
@@ -96,7 +110,7 @@ export default function Timetable() {
       };
       if (form.id) await api(`/classes/${form.id}`, { method: "PUT", body });
       else await api("/classes", { method: "POST", body });
-      toast.show("Timetable updated");
+      toast.show(form.id ? "Class updated" : "Class added to timetable");
       setEditOpen(false);
       load(date);
     } catch (e: any) {
@@ -107,7 +121,7 @@ export default function Timetable() {
   const cancelDate = async (c: any) => {
     try {
       const r = await api(`/classes/${c.id}/cancel-date`, { method: "POST", body: { date } });
-      toast.show(`Class cancelled — ${r.notified} members notified`);
+      toast.show(`Session cancelled — ${r.notified} members notified`);
       setDetail(null);
       load(date);
     } catch (e: any) {
@@ -119,33 +133,19 @@ export default function Timetable() {
     await Share.share({ message: `Book a free spot in ${c.name} at ANAM MMA: ${BASE_URL}/guest/${c.id}` });
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + SP.md }]}>
-        <Text style={styles.title}>TIMETABLE</Text>
-        {canManage && (
-          <Pressable testID="add-class-button" onPress={() => openEdit()} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name="add-circle" size={24} color={C.brand} />
-          </Pressable>
-        )}
-      </View>
-
+  // ---------- DAY VIEW ----------
+  const DayView = () => (
+    <>
       <View style={{ height: 76, justifyContent: "center", borderBottomWidth: 1, borderColor: C.border }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SP.sm, paddingHorizontal: SP.lg }}>
           {days.map((d) => (
-            <Pressable
-              key={d.date}
-              testID={`date-${d.date}`}
-              onPress={() => setDate(d.date)}
-              style={[styles.dateChip, date === d.date && styles.dateChipActive]}
-            >
+            <Pressable key={d.date} testID={`date-${d.date}`} onPress={() => setDate(d.date)} style={[styles.dateChip, date === d.date && styles.dateChipActive]}>
               <Text style={[styles.dateDay, date === d.date && { color: C.onBrand }]}>{d.day}</Text>
               <Text style={[styles.dateNum, date === d.date && { color: C.onBrand }]}>{d.num}</Text>
             </Pressable>
           ))}
         </ScrollView>
       </View>
-
       <FlatList
         data={classes}
         keyExtractor={(i) => i.id}
@@ -159,16 +159,14 @@ export default function Timetable() {
               <Text style={styles.dur}>{c.duration_min}m</Text>
             </View>
             <View style={{ flex: 1, gap: 4 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: SP.sm }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: SP.sm, flexWrap: "wrap" }}>
                 <Text style={styles.className}>{c.name}</Text>
                 {c.cancelled && <Badge text="Cancelled" tone="error" />}
                 {c.my_booking && <Badge text={c.my_booking.status === "waitlist" ? "Waitlist" : "Booked"} tone={c.my_booking.status === "waitlist" ? "warning" : "success"} />}
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 {c.coach?.photo ? <Image source={{ uri: c.coach.photo }} style={styles.coachPic} /> : null}
-                <Text style={styles.meta}>
-                  {c.coach?.name || "TBC"} • {c.room}
-                </Text>
+                <Text style={styles.meta}>{c.coach?.name || "TBC"} • {c.room}</Text>
               </View>
               <CapacityBar booked={c.booked_count} capacity={c.capacity} />
             </View>
@@ -185,13 +183,74 @@ export default function Timetable() {
           </Pressable>
         )}
       />
+    </>
+  );
 
-      {/* class detail sheet */}
+  // ---------- WEEK VIEW (concise overview, admin-friendly) ----------
+  const WeekView = () => {
+    const grouped = FULL_DAYS.map((label, i) => ({
+      label, idx: i,
+      items: weekClasses.filter((c) => c.day_of_week === i).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    }));
+    return (
+      <ScrollView
+        contentContainerStyle={{ padding: SP.lg, paddingBottom: SP.xxl }}
+        refreshControl={<RefreshControl refreshing={refreshing} tintColor={C.brand} onRefresh={async () => { setRefreshing(true); await load(date); setRefreshing(false); }} />}
+      >
+        {grouped.map((g) => (
+          <View key={g.label} style={{ marginBottom: SP.lg }}>
+            <View style={styles.weekDayRow}>
+              <Text style={styles.weekDay}>{g.label.toUpperCase()}</Text>
+              {canManage && (
+                <Pressable testID={`add-class-${g.label.toLowerCase()}`} onPress={() => openEdit(undefined, g.idx)} hitSlop={10} style={styles.weekAdd}>
+                  <Ionicons name="add" size={18} color={C.brand} />
+                  <Text style={styles.weekAddText}>ADD</Text>
+                </Pressable>
+              )}
+            </View>
+            {g.items.length === 0 ? (
+              <Text style={styles.weekEmpty}>Rest day — no classes</Text>
+            ) : (
+              g.items.map((c) => (
+                <Pressable key={c.id} testID={`week-class-${c.id}`} style={styles.weekRow} onPress={() => (canManage ? openEdit(c) : setDetail({ ...c, booked_count: 0, waitlist_count: 0 }))}>
+                  <Text style={styles.weekTime}>{c.start_time}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.weekName}>{c.name}</Text>
+                    <Text style={styles.meta}>{c.coach?.name || "TBC"} • {c.room} • cap {c.capacity}</Text>
+                  </View>
+                  {canManage && <Ionicons name="pencil" size={16} color={C.onSurface3} />}
+                </Pressable>
+              ))
+            )}
+          </View>
+        ))}
+      </ScrollView>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + SP.md }]}>
+        <Text style={styles.title}>TIMETABLE</Text>
+        <View style={styles.viewToggle}>
+          <Pressable testID="view-day" onPress={() => setView("day")} style={[styles.viewBtn, view === "day" && styles.viewBtnActive]}>
+            <Text style={[styles.viewText, view === "day" && { color: C.onBrand }]}>DAY</Text>
+          </Pressable>
+          <Pressable testID="view-week" onPress={() => setView("week")} style={[styles.viewBtn, view === "week" && styles.viewBtnActive]}>
+            <Text style={[styles.viewText, view === "week" && { color: C.onBrand }]}>WEEK</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {view === "day" ? <DayView /> : <WeekView />}
+
+      {/* class detail sheet (day view / member week view) */}
       <Sheet visible={!!detail} onClose={() => setDetail(null)} title={detail?.name}>
         {detail && (
           <View>
             <Text style={styles.meta}>
-              {DAYS[detail.day_of_week]} • {detail.start_time} ({detail.duration_min} min) • {detail.room} • {detail.booked_count}/{detail.capacity} booked
+              {FULL_DAYS[detail.day_of_week]} • {detail.start_time} ({detail.duration_min} min) • {detail.room}
+              {detail.date ? ` • ${detail.booked_count}/${detail.capacity} booked` : ` • cap ${detail.capacity}`}
               {detail.waitlist_count ? ` • ${detail.waitlist_count} waitlisted` : ""}
             </Text>
             {detail.description ? <Text style={styles.desc}>{detail.description}</Text> : null}
@@ -208,8 +267,8 @@ export default function Timetable() {
               <Btn small variant="outline" testID="share-guest-link-button" title="SHARE GUEST BOOKING LINK" onPress={() => shareGuestLink(detail)} />
               {canManage && (
                 <>
-                  <Btn small variant="outline" testID="edit-class-button" title="EDIT CLASS" onPress={() => { setDetail(null); openEdit(detail); }} />
-                  {!detail.cancelled && (
+                  <Btn small variant="outline" testID="edit-class-button" title="EDIT CLASS" onPress={() => openEdit(detail)} />
+                  {!detail.cancelled && detail.date && (
                     <Btn small variant="danger" testID="cancel-class-date-button" title={`CANCEL THIS SESSION (${date})`} onPress={() => cancelDate(detail)} />
                   )}
                 </>
@@ -219,43 +278,70 @@ export default function Timetable() {
         )}
       </Sheet>
 
-      {/* edit/add class sheet */}
-      <Sheet visible={editOpen} onClose={() => setEditOpen(false)} title={form.id ? "EDIT CLASS" : "ADD CLASS"}>
-        <Input testID="class-name-input" label="Name" value={form.name} onChangeText={(v: string) => setForm({ ...form, name: v })} placeholder="e.g. K1 Kickboxing" />
-        <Input testID="class-desc-input" label="Description" value={form.description} onChangeText={(v: string) => setForm({ ...form, description: v })} multiline style={{ height: 60, textAlignVertical: "top" }} />
+      {/* add/edit class — tap-based pickers, no typing needed for time/duration/capacity */}
+      <Sheet visible={editOpen} onClose={() => setEditOpen(false)} title={form.id ? "EDIT CLASS" : `ADD CLASS — ${FULL_DAYS[form.day_of_week ?? 0]?.toUpperCase() || ""}`}>
+        <Input testID="class-name-input" label="Class name" value={form.name} onChangeText={(v: string) => setForm({ ...form, name: v })} placeholder="e.g. K1 Kickboxing" />
+
         <Text style={styles.label}>DAY</Text>
-        <View style={{ height: 56, justifyContent: "center" }}>
+        <View style={{ height: 48, justifyContent: "center", marginBottom: SP.sm }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SP.sm }}>
             {DAYS.map((d, i) => (
-              <Pressable key={d} testID={`day-${d}`} onPress={() => setForm({ ...form, day_of_week: i })} style={[styles.dayChip, form.day_of_week === i && { backgroundColor: C.brand, borderColor: C.brand }]}>
-                <Text style={[styles.meta, form.day_of_week === i && { color: C.onBrand }]}>{d}</Text>
+              <Pressable key={d} testID={`day-${d}`} onPress={() => setForm({ ...form, day_of_week: i })} style={[styles.pickChip, form.day_of_week === i && styles.pickChipActive]}>
+                <Text style={[styles.pickText, form.day_of_week === i && { color: C.onBrand }]}>{d}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </View>
-        <View style={{ flexDirection: "row", gap: SP.sm }}>
-          <View style={{ flex: 1 }}>
-            <Input testID="class-time-input" label="Start (HH:MM)" value={form.start_time} onChangeText={(v: string) => setForm({ ...form, start_time: v })} placeholder="18:00" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Input testID="class-duration-input" label="Mins" value={String(form.duration_min ?? "")} onChangeText={(v: string) => setForm({ ...form, duration_min: v })} keyboardType="numeric" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Input testID="class-capacity-input" label="Capacity" value={String(form.capacity ?? "")} onChangeText={(v: string) => setForm({ ...form, capacity: v })} keyboardType="numeric" />
+
+        <Text style={styles.label}>START TIME</Text>
+        <View style={{ height: 48, justifyContent: "center", marginBottom: SP.sm }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SP.sm }}>
+            {TIME_SLOTS.map((t) => (
+              <Pressable key={t} testID={`time-${t}`} onPress={() => setForm({ ...form, start_time: t })} style={[styles.pickChip, form.start_time === t && styles.pickChipActive]}>
+                <Text style={[styles.pickText, form.start_time === t && { color: C.onBrand }]}>{t}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        <Text style={styles.label}>DURATION</Text>
+        <View style={{ flexDirection: "row", gap: SP.sm, marginBottom: SP.md, flexWrap: "wrap" }}>
+          {DURATIONS.map((d) => (
+            <Pressable key={d} testID={`duration-${d}`} onPress={() => setForm({ ...form, duration_min: d })} style={[styles.pickChip, Number(form.duration_min) === d && styles.pickChipActive]}>
+              <Text style={[styles.pickText, Number(form.duration_min) === d && { color: C.onBrand }]}>{d}m</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: SP.md }}>
+          <Text style={styles.label}>CAPACITY</Text>
+          <View style={styles.stepper}>
+            <Pressable testID="capacity-minus" onPress={() => setForm({ ...form, capacity: Math.max(1, Number(form.capacity || 20) - 2) })} style={styles.stepBtn} hitSlop={6}>
+              <Ionicons name="remove" size={20} color={C.onSurface} />
+            </Pressable>
+            <Text style={styles.stepVal}>{form.capacity ?? 20}</Text>
+            <Pressable testID="capacity-plus" onPress={() => setForm({ ...form, capacity: Number(form.capacity || 20) + 2 })} style={styles.stepBtn} hitSlop={6}>
+              <Ionicons name="add" size={20} color={C.onSurface} />
+            </Pressable>
           </View>
         </View>
+
         <Input testID="class-room-input" label="Room" value={form.room} onChangeText={(v: string) => setForm({ ...form, room: v })} placeholder="Main Mat" />
+
         <Text style={styles.label}>COACH</Text>
-        <View style={{ height: 56, justifyContent: "center" }}>
+        <View style={{ height: 48, justifyContent: "center", marginBottom: SP.sm }}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SP.sm }}>
             {coaches.map((co) => (
-              <Pressable key={co.id} testID={`coach-pick-${co.id}`} onPress={() => setForm({ ...form, coach_id: co.id })} style={[styles.dayChip, form.coach_id === co.id && { backgroundColor: C.brand, borderColor: C.brand }]}>
-                <Text style={[styles.meta, form.coach_id === co.id && { color: C.onBrand }]}>{co.name}</Text>
+              <Pressable key={co.id} testID={`coach-pick-${co.id}`} onPress={() => setForm({ ...form, coach_id: co.id })} style={[styles.pickChip, form.coach_id === co.id && styles.pickChipActive]}>
+                <Text style={[styles.pickText, form.coach_id === co.id && { color: C.onBrand }]}>{co.name}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </View>
-        <Btn testID="save-class-button" title="SAVE CLASS" onPress={saveClass} style={{ marginTop: SP.sm }} />
+
+        <Input testID="class-desc-input" label="Description (optional)" value={form.description} onChangeText={(v: string) => setForm({ ...form, description: v })} multiline style={{ height: 56, textAlignVertical: "top" }} />
+
+        <Btn testID="save-class-button" title={form.id ? "SAVE CHANGES" : "ADD TO TIMETABLE"} onPress={saveClass} />
         {form.id && (
           <Btn
             testID="delete-class-button"
@@ -282,7 +368,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SP.lg, paddingBottom: SP.md, borderBottomWidth: 1, borderColor: C.border,
   },
   title: { fontFamily: F.display, fontSize: 26, color: C.onSurface, letterSpacing: 1 },
-  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  viewToggle: { flexDirection: "row", backgroundColor: C.surface2, borderRadius: R.pill, borderWidth: 1, borderColor: C.border, padding: 3 },
+  viewBtn: { paddingHorizontal: SP.lg, paddingVertical: 7, borderRadius: R.pill },
+  viewBtnActive: { backgroundColor: C.brand },
+  viewText: { fontFamily: F.bodyBold, fontSize: 12, color: C.onSurface3, letterSpacing: 1 },
   dateChip: {
     width: 52, height: 56, borderRadius: R.md, backgroundColor: C.surface2, borderWidth: 1,
     borderColor: C.border, alignItems: "center", justifyContent: "center", flexShrink: 0,
@@ -305,8 +394,26 @@ const styles = StyleSheet.create({
   coachBig: { width: 56, height: 56, borderRadius: 28 },
   coachName: { fontFamily: F.bodyBold, fontSize: 15, color: C.onSurface, marginBottom: 2 },
   label: { color: C.onSurface3, fontFamily: F.bodyBold, fontSize: 12, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 },
-  dayChip: {
+  // week view
+  weekDayRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SP.sm },
+  weekDay: { fontFamily: F.display, fontSize: 18, color: C.brand, letterSpacing: 1.2 },
+  weekAdd: { flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: SP.sm, height: 32, justifyContent: "center" },
+  weekAddText: { fontFamily: F.bodyBold, fontSize: 12, color: C.brand, letterSpacing: 0.8 },
+  weekEmpty: { fontFamily: F.body, fontSize: 12, color: C.onSurface3, opacity: 0.6, paddingVertical: 4 },
+  weekRow: {
+    flexDirection: "row", alignItems: "center", gap: SP.md, backgroundColor: C.surface2,
+    borderRadius: R.md, borderWidth: 1, borderColor: C.border, paddingHorizontal: SP.md, paddingVertical: 10, marginBottom: 6,
+  },
+  weekTime: { fontFamily: F.display, fontSize: 17, color: C.brand, width: 48 },
+  weekName: { fontFamily: F.bodyBold, fontSize: 14, color: C.onSurface },
+  // pickers
+  pickChip: {
     paddingHorizontal: SP.md, height: 36, borderRadius: R.pill, backgroundColor: C.surface3,
     borderWidth: 1, borderColor: C.border, justifyContent: "center", flexShrink: 0,
   },
+  pickChipActive: { backgroundColor: C.brand, borderColor: C.brand },
+  pickText: { fontFamily: F.bodyBold, fontSize: 13, color: C.onSurface2 },
+  stepper: { flexDirection: "row", alignItems: "center", gap: SP.md, backgroundColor: C.surface3, borderRadius: R.pill, padding: 4 },
+  stepBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface2, alignItems: "center", justifyContent: "center" },
+  stepVal: { fontFamily: F.display, fontSize: 20, color: C.onSurface, minWidth: 32, textAlign: "center" },
 });
