@@ -967,7 +967,7 @@ async def seed():
             "private_session_policy": "Private sessions can be cancelled free of charge up to 24 hours in advance. Late cancellations may be charged in full.",
             "club_email": "", "waiver_version": WAIVER_VERSION,
             "media": {
-                "login_bg": "https://static.wixstatic.com/media/ec6808_2234a56ac215429dba5ade2cac919411~mv2.jpg",
+                "login_bg": "https://images.unsplash.com/photo-1708134028754-5ba43093fedf?crop=entropy&cs=srgb&fm=jpg&q=85",
                 "logo": "", "banner": "https://images.unsplash.com/photo-1708134028754-5ba43093fedf?crop=entropy&cs=srgb&fm=jpg&q=85"
             }})
     admin_email = os.environ['ADMIN_EMAIL'].lower()

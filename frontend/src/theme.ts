@@ -28,7 +28,7 @@ export const F = {
 };
 
 export const IMAGES = {
-  hero: "https://static.wixstatic.com/media/ec6808_2234a56ac215429dba5ade2cac919411~mv2.jpg",
+  hero: "https://images.unsplash.com/photo-1708134028754-5ba43093fedf?crop=entropy&cs=srgb&fm=jpg&q=85",
   training:
     "https://images.unsplash.com/photo-1708134028754-5ba43093fedf?crop=entropy&cs=srgb&fm=jpg&q=85",
 };
