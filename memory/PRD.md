@@ -15,6 +15,12 @@ Build a complete club management mobile app for ANAM MMA (reference anammma.com 
 - Keyboard: react-native-keyboard-controller (KeyboardProvider + KeyboardAwareScrollView).
 
 ## Implemented (2026-06-12)
+### Iteration 2 (UX revamp per user feedback)
+- Timetable: DAY/WEEK toggle. WEEK = concise admin overview grouped Mon–Sun with per-day ADD buttons, tap-row-to-edit. Add/edit form now tap-based: day chips, time-slot chips (06:00–21:30), duration chips, capacity +/- stepper, coach chips — no typing needed.
+- Member management revamp: prominent "+ ADD MEMBER (CASH AT DESK)" → one-flow create account + plan + cash payment (POST /api/users/member), auto temp password with share button; "Unpaid" filter; € due badges; member detail with quick APPROVE / MARK CASH PAID actions and SELL/RENEW PLAN (cash) flow; POST /api/subscriptions supports mark_paid.
+- Login background switched to generic MMA gym image (admin-replaceable in Manage → Media).
+- Test data cleaned from DB after iteration 2 testing.
+
 - JWT auth, roles, granular coach permissions (5 flags), admin seeding, open/approval registration toggle
 - Waiver gate with versioned acceptance log (waiver_log collection)
 - Plans CRUD (monthly/trial/class_pack), subscriptions: assign → mark cash paid → receipt; freeze/resume with end-date extension; 7-day expiry reminders; expired auto-handling
