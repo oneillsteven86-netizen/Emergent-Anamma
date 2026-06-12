@@ -1,0 +1,191 @@
+{
+  "app_name": "ANAM MMA",
+  "personality": "7 Dark-First Utility fused with 6 Glass / Luxe premium surfaces",
+  "personality_one_liner": "A premium, high-contrast, cinematic dark-mode experience that feels like a luxury fighting club—athletic, disciplined, and razor-sharp.",
+  "color": {
+    "surface": "#0A0A0A",
+    "onSurface": "#F5F5F5",
+    "surfaceSecondary": "#141414",
+    "onSurfaceSecondary": "#D4D4D4",
+    "surfaceTertiary": "#1F1F1F",
+    "onSurfaceTertiary": "#A3A3A3",
+    "surfaceInverse": "#F5F5F5",
+    "onSurfaceInverse": "#0A0A0A",
+    "brand": "#B38B4D",
+    "brandPrimary": "#C69C5E",
+    "onBrandPrimary": "#121212",
+    "brandSecondary": "#8C6B36",
+    "onBrandSecondary": "#F5F5F5",
+    "brandTertiary": "#332612",
+    "onBrandTertiary": "#E0B775",
+    "success": "#2E7D32",
+    "onSuccess": "#E8F5E9",
+    "warning": "#F57F17",
+    "onWarning": "#FFFDE7",
+    "error": "#B71C1C",
+    "onError": "#FFEBEE",
+    "info": "#455A64",
+    "onInfo": "#ECEFF1",
+    "border": "#262626",
+    "borderStrong": "#3A3A3A",
+    "divider": "#1F1F1F"
+  },
+  "typography": {
+    "displayFontFamily": "Barlow Condensed",
+    "textFontFamily": "Manrope",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room for cinematic feel, but tight grouping for related class metrics. Use padding to create depth, avoiding cramming content to the edges.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 4,
+    "md": 8,
+    "lg": 16,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use glass for the bottom tab bar when content scrolls behind it",
+      "Use glass overlays on hero cards paired with background photography",
+      "Use glass for sticky header backgrounds during scroll",
+      "Apply translucent tinted base (\u226575% of surface color) underneath text on glass to ensure readability"
+    ],
+    "dont's": [
+      "Never apply glass to standard form fields or basic list rows",
+      "Do not over-blur; text must remain stark and highly legible",
+      "Never blur body content or use glass on dense data/stats cards"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login/Registration",
+      "purpose": "A cinematic gateway into the club, communicating discipline and premium quality instantly.",
+      "states": {
+        "loading": "Centered minimalist spinner in brandPrimary",
+        "empty": "N/A",
+        "error": "Bottom-anchored error toast with red accent and clear message"
+      },
+      "layout": "Full-bleed background image of the gym/ring with a heavy top-to-bottom dark gradient scrim (\u226580% opacity at bottom). Logo (Text wordmark in Barlow Condensed if PNG unavailable) anchored top-center. Registration/Login toggle and form inputs anchored in the bottom third over the darkest part of the scrim. Gold (brandPrimary) full-width sticky CTA button at the bottom above safe area."
+    },
+    {
+      "name": "Member Home / Dashboard",
+      "purpose": "A commanding overview of the member's upcoming training schedule and club news.",
+      "states": {
+        "loading": "Dark skeleton loaders for cards and text blocks",
+        "empty": "Illustration of gloves or mat + 'No upcoming classes. Book your next session.'",
+        "error": "Error message with a retry button centered vertically"
+      },
+      "layout": "Sticky header with user's name and avatar. Hero 'Next Class' card (glassmorphism overlay over an atmospheric gym image) showing time, coach, and class type. Below hero: horizontally scrolling 'Announcements' cards (solid surfaceSecondary with border). Below announcements: vertical 'This Week's Schedule' list showing day and class availability."
+    },
+    {
+      "name": "Timetable & Booking",
+      "purpose": "A high-performance schedule for booking classes with immediate visibility into capacity.",
+      "states": {
+        "loading": "Centered spinner or list skeleton",
+        "empty": "Empty state illustration + 'No classes scheduled for this date.'",
+        "error": "Readable error message + Retry button"
+      },
+      "layout": "Date-picker horizontal tape at the top (sticky). Vertical list of class cards. Each class card uses surfaceSecondary. Left side: Time. Right side: Class Name (Barlow Condensed), Coach avatar, and a segmented visual capacity bar (e.g., 18/20 spots filled). Primary CTA 'Book' or 'Join Waitlist' within the card. Warm accents highlight classes filling up."
+    },
+    {
+      "name": "Admin Dashboard",
+      "purpose": "An operational command center for gym owners to track revenue, members, and daily classes.",
+      "states": {
+        "loading": "Skeleton grids for stats",
+        "empty": "N/A",
+        "error": "Error reading database + Retry"
+      },
+      "layout": "Grid of 4 square stat cards at the top (Active Members, Revenue, Pending Approvals, Expiring). Large oversized typography (Barlow Condensed) for numbers. Below: 'Today's Classes' list, tap to open attendance sheet. Bottom: Quick actions row (Add Announcement, Add Member)."
+    },
+    {
+      "name": "Coach Check-in / Class Roster",
+      "purpose": "A fast, high-contrast operational screen for coaches to mark attendance during class.",
+      "states": {
+        "loading": "Skeleton rows",
+        "empty": "'No members booked for this class yet.'",
+        "error": "Failed to load roster + Retry"
+      },
+      "layout": "Header shows class name and time. Search bar to quickly find member. Vertical list of booked members with their avatar/initials. Right side of each row: High-contrast toggle or 'Check In' button (surfaceTertiary to brandPrimary on active). Focus is purely on speed and glanceability—no decorative images."
+    }
+  ],
+  "images": {
+    "hero_bg": {
+      "url": "https://static.wixstatic.com/media/ec6808_2234a56ac215429dba5ade2cac919411~mv2.jpg",
+      "dark": "https://static.wixstatic.com/media/ec6808_2234a56ac215429dba5ade2cac919411~mv2.jpg",
+      "alt": "Atmospheric MMA fight night and gym environment"
+    },
+    "class_k1": {
+      "url": "https://static.wixstatic.com/media/ec6808_eadc786c13cf4d698c7600012ac1f087~mv2.png",
+      "alt": "Two athletes practising K1 kickboxing"
+    },
+    "class_boxing": {
+      "url": "https://static.wixstatic.com/media/ec6808_3839340dc8f64b548cb617ff2d3f44e5~mv2.png",
+      "alt": "A boxer working pads in a modern gym"
+    },
+    "coach_stephen": {
+      "url": "https://static.wixstatic.com/media/ec6808_4d7a3ca0e31f46b38f28088561a863ec~mv2.jpg",
+      "alt": "Stephen - Head Coach"
+    },
+    "coach_danny": {
+      "url": "https://static.wixstatic.com/media/ec6808_9cf6de1ee5254aa3ad572c0d58983ee5~mv2.png",
+      "alt": "Danny - K1 Coach"
+    },
+    "coach_ciaran": {
+      "url": "https://static.wixstatic.com/media/3f6c3b18c0a646da9ac9cb2c50995106.jpg",
+      "alt": "Ciaran - Judo Coach"
+    },
+    "training_generic": {
+      "url": "https://images.unsplash.com/photo-1708134028754-5ba43093fedf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxNTUElMjBneW0lMjBkYXJrJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzgxMzAyMDg3fDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1708134028754-5ba43093fedf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxNTUElMjBneW0lMjBkYXJrJTIwdHJhaW5pbmd8ZW58MHx8fHwxNzgxMzAyMDg3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Woman punching a heavy bag in a dark gym"
+    }
+  },
+  "haptics": {
+    "primary_button_press": "impactLight",
+    "tab_bar_navigate": "selection",
+    "class_booked_success": "notificationSuccess",
+    "error_occurred": "notificationError",
+    "toggle_switch": "impactLight",
+    "pull_to_refresh": "impactMedium"
+  },
+  "instructions_to_main_agent": [
+    "Apply a premium dark MMA aesthetic (Dark-First Utility + Luxe). Do not use blues or purples.",
+    "Utilize Barlow Condensed for all display titles and numbers (Admin stats, class times, capacities) to give an athletic, structural feel.",
+    "Use Manrope (weight 400 or 500) for readable body text, labels, and forms. Never use weights above 500.",
+    "Ensure every background image is paired with a top-to-bottom dark gradient scrim (\u226580% surfaceInverse opacity at the bottom) before rendering text on it.",
+    "Build the capacity indicator on class cards visually, e.g., a progress bar or segmented blocks using brandPrimary for filled spots.",
+    "When a screen lists entities (coaches or classes), prioritize the provided high-quality Wix PNG/JPG images over initials.",
+    "Implement safe areas meticulously—header content should never hide under notches, and bottom buttons must clear the home indicator.",
+    "Use glassmorphism (expo-blur or expo-glass-effect) for sticky headers, the bottom tab bar, and overlays on hero image cards, ensuring a dark base tint underneath for text legibility."
+  ]
+}
