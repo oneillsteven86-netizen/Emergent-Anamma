@@ -41,6 +41,10 @@ export default function Members() {
   const [mPaid, setMPaid] = useState(true);
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<any>(null);
+  // mode: "new" creates a fresh member; "existing" charges a plan to an existing member
+  const [addMode, setAddMode] = useState<"new" | "existing">("new");
+  const [pickQuery, setPickQuery] = useState("");
+  const [pickedMember, setPickedMember] = useState<any>(null);
   // add coach
   const [coachOpen, setCoachOpen] = useState(false);
   const [cName, setCName] = useState("");
@@ -114,6 +118,31 @@ export default function Members() {
   };
 
   const createMember = async () => {
+    if (addMode === "existing") {
+      if (!pickedMember) return toast.show("Pick a member", "error");
+      if (!mPlan) return toast.show("Pick a plan", "error");
+      setCreating(true);
+      try {
+        const sub = await api("/subscriptions", {
+          method: "POST",
+          body: { user_id: pickedMember.id, plan_id: mPlan, mark_paid: mPaid },
+        });
+        setCreated({
+          user: pickedMember,
+          subscription: sub,
+          temp_password: null,
+          existing: true,
+        });
+        toast.show(mPaid ? "Payment recorded ✓" : "Plan assigned");
+        load();
+      } catch (e: any) {
+        toast.show(e.message, "error");
+      } finally {
+        setCreating(false);
+      }
+      return;
+    }
+    // New-member path (unchanged)
     if (!mName || !mEmail) return toast.show("Name and email required", "error");
     setCreating(true);
     try {
@@ -135,6 +164,7 @@ export default function Members() {
     setAddOpen(false);
     setCreated(null);
     setMName(""); setMEmail(""); setMPhone(""); setMPlan(null); setMPaid(true);
+    setAddMode("new"); setPickQuery(""); setPickedMember(null);
   };
 
   const createCoach = async () => {
@@ -266,12 +296,109 @@ export default function Members() {
           </View>
         ) : (
           <View>
-            <Input testID="new-member-name-input" label="Full name" value={mName} onChangeText={setMName} placeholder="Conor Walsh" autoCapitalize="words" />
-            <Input testID="new-member-email-input" label="Email" value={mEmail} onChangeText={setMEmail} placeholder="member@email.com" autoCapitalize="none" keyboardType="email-address" />
-            <Input testID="new-member-phone-input" label="Phone (optional)" value={mPhone} onChangeText={setMPhone} keyboardType="phone-pad" placeholder="+353…" />
+            {/* Mode tabs */}
+            <View style={styles.modeRow}>
+              <Pressable
+                testID="mode-new-member"
+                style={[styles.modeTab, addMode === "new" && styles.modeTabActive]}
+                onPress={() => { setAddMode("new"); setPickedMember(null); }}
+              >
+                <Text style={[styles.modeText, addMode === "new" && styles.modeTextActive]}>+ NEW MEMBER</Text>
+              </Pressable>
+              <Pressable
+                testID="mode-existing-member"
+                style={[styles.modeTab, addMode === "existing" && styles.modeTabActive]}
+                onPress={() => { setAddMode("existing"); setMName(""); setMEmail(""); setMPhone(""); }}
+              >
+                <Text style={[styles.modeText, addMode === "existing" && styles.modeTextActive]}>↻ EXISTING</Text>
+              </Pressable>
+            </View>
+
+            {addMode === "new" ? (
+              <>
+                <Input testID="new-member-name-input" label="Full name" value={mName} onChangeText={setMName} placeholder="Conor Walsh" autoCapitalize="words" />
+                <Input testID="new-member-email-input" label="Email" value={mEmail} onChangeText={setMEmail} placeholder="member@email.com" autoCapitalize="none" keyboardType="email-address" />
+                <Input testID="new-member-phone-input" label="Phone (optional)" value={mPhone} onChangeText={setMPhone} keyboardType="phone-pad" placeholder="+353…" />
+              </>
+            ) : (
+              <View>
+                {pickedMember ? (
+                  <View style={styles.pickedCard} testID="picked-member-card">
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{pickedMember.name?.charAt(0)?.toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName}>{pickedMember.name}</Text>
+                      <Text style={styles.rowMeta}>{pickedMember.email}</Text>
+                      {(() => {
+                        const cur = subFor(pickedMember.id);
+                        if (!cur) return null;
+                        return (
+                          <Text style={[styles.rowMeta, { marginTop: 2, color: C.brand }]}>
+                            Current: {cur.plan_name} • {cur.status === "pending_payment" ? "UNPAID" : cur.status === "active" ? `until ${cur.end_date}` : cur.status}
+                          </Text>
+                        );
+                      })()}
+                    </View>
+                    <Pressable testID="clear-picked-member" onPress={() => setPickedMember(null)} hitSlop={10}>
+                      <Ionicons name="close-circle" size={26} color={C.onSurface3} />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <>
+                    <Input
+                      testID="member-search-input"
+                      label="Search members by name or email"
+                      value={pickQuery}
+                      onChangeText={setPickQuery}
+                      placeholder="Type to filter…"
+                      autoCapitalize="none"
+                    />
+                    <View style={styles.pickList}>
+                      {(() => {
+                        const q = pickQuery.trim().toLowerCase();
+                        const list = users
+                          .filter((u: any) => u.role === "member" && u.status !== "removed")
+                          .filter((u: any) => !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))
+                          .slice(0, 30);
+                        if (list.length === 0) {
+                          return <Text style={[styles.rowMeta, { padding: SP.md }]}>No members match. Switch to NEW MEMBER if this is their first visit.</Text>;
+                        }
+                        return list.map((u: any) => {
+                          const cur = subFor(u.id);
+                          return (
+                            <Pressable
+                              key={u.id}
+                              testID={`pick-member-${u.id}`}
+                              style={styles.pickRow}
+                              onPress={() => setPickedMember(u)}
+                            >
+                              <View style={styles.avatarSm}>
+                                <Text style={styles.avatarText}>{u.name?.charAt(0)?.toUpperCase()}</Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.rowName}>{u.name}</Text>
+                                <Text style={styles.rowMeta} numberOfLines={1}>
+                                  {cur ? `${cur.plan_name} • ${cur.status === "pending_payment" ? "UNPAID" : cur.status === "active" ? `until ${cur.end_date}` : cur.status}` : u.email}
+                                </Text>
+                              </View>
+                              {cur?.status === "pending_payment" && <Badge text="€ due" tone="warning" />}
+                              <Ionicons name="chevron-forward" size={20} color={C.onSurface3} />
+                            </Pressable>
+                          );
+                        });
+                      })()}
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+
             <Text style={styles.label}>MEMBERSHIP PLAN (TAP TO SELECT)</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SP.sm, marginBottom: SP.md }}>
-              <Chip label="No plan yet" active={mPlan === null} onPress={() => setMPlan(null)} testID="new-member-plan-none" />
+              {addMode === "new" && (
+                <Chip label="No plan yet" active={mPlan === null} onPress={() => setMPlan(null)} testID="new-member-plan-none" />
+              )}
               {plans.map((p) => (
                 <Chip key={p.id} label={`${p.name} €${p.price}`} active={mPlan === p.id} onPress={() => setMPlan(p.id)} testID={`new-member-plan-${p.id}`} />
               ))}
@@ -282,10 +409,18 @@ export default function Members() {
                 <Text style={styles.cashText}>Cash received — mark paid & issue receipt now</Text>
               </Pressable>
             )}
-            <Btn testID="create-member-button" title="CREATE MEMBER" onPress={createMember} loading={creating} />
-            <Text style={[styles.rowMeta, { marginTop: SP.sm, textAlign: "center" }]}>
-              A temporary password is generated automatically — share it after creating.
-            </Text>
+            <Btn
+              testID="create-member-button"
+              title={addMode === "existing" ? (mPaid ? "RECORD PAYMENT" : "ASSIGN PLAN") : "CREATE MEMBER"}
+              onPress={createMember}
+              loading={creating}
+              disabled={addMode === "existing" && !pickedMember}
+            />
+            {addMode === "new" && (
+              <Text style={[styles.rowMeta, { marginTop: SP.sm, textAlign: "center" }]}>
+                A temporary password is generated automatically — share it after creating.
+              </Text>
+            )}
           </View>
         )}
       </Sheet>
@@ -469,4 +604,31 @@ const styles = StyleSheet.create({
   cashText: { flex: 1, fontFamily: F.bodyBold, fontSize: 14, color: C.onSurface },
   successBox: { alignItems: "center", gap: 4, backgroundColor: C.surface3, borderRadius: R.lg, padding: SP.xl, marginBottom: SP.lg },
   successTitle: { fontFamily: F.display, fontSize: 22, color: C.onSurface, marginTop: SP.sm },
+  // mode tabs (New / Existing)
+  modeRow: {
+    flexDirection: "row", gap: SP.sm, backgroundColor: C.surface3,
+    padding: 4, borderRadius: R.pill, marginBottom: SP.lg,
+  },
+  modeTab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: R.pill },
+  modeTabActive: { backgroundColor: C.brand },
+  modeText: { fontFamily: F.bodyBold, fontSize: 12, color: C.onSurface3, letterSpacing: 1 },
+  modeTextActive: { color: C.onBrand },
+  // picked-member chip card
+  pickedCard: {
+    flexDirection: "row", alignItems: "center", gap: SP.md,
+    backgroundColor: C.surface2, borderWidth: 1, borderColor: C.brand,
+    borderRadius: R.md, padding: SP.md, marginBottom: SP.lg,
+  },
+  pickList: {
+    maxHeight: 260, backgroundColor: C.surface2, borderRadius: R.md,
+    borderWidth: 1, borderColor: C.border, marginBottom: SP.lg, overflow: "hidden",
+  },
+  pickRow: {
+    flexDirection: "row", alignItems: "center", gap: SP.md,
+    paddingHorizontal: SP.md, paddingVertical: 10, borderBottomWidth: 1, borderColor: C.border,
+  },
+  avatarSm: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: C.surface3,
+    alignItems: "center", justifyContent: "center",
+  },
 });
