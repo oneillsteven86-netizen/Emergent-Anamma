@@ -9,8 +9,15 @@ Build a complete club management mobile app for ANAM MMA (reference anammma.com 
 - Admin seeded: stevie@aipnua.com / AnamAdmin2026! — handover supported (promote-admin + email change)
 - Branding: agent's judgment — dark premium, gold/bronze accent, Barlow Condensed + Manrope
 
-## Architecture
-- Backend: FastAPI single server.py (/api prefix), motor MongoDB, PyJWT + pwdlib(argon2), SendGrid via BackgroundTasks. UUID string ids, _id excluded everywhere.
+## Architecture (Updated 2026-06-14 — Supabase Migration)
+- **Backend: 100% Supabase** — Postgres + Auth + Storage + Edge-less (logic lives in Postgres functions). Frontend talks directly to Supabase via @supabase/supabase-js. No FastAPI process.
+- **Email:** SendGrid invoked from Postgres via `pg_net.http_post`, key stored in `app_secrets` table (RLS-blocked for clients).
+- **Cron:** `pg_cron` runs `daily_membership_maintenance()` at 06:00 UTC (expiry + 7-day reminders).
+- **Auth:** Supabase Auth (email+password); custom `public_signup` RPC for self-signup that auto-confirms email (avoids GoTrue's mailer); session persisted via expo-secure-store on native and AsyncStorage on web.
+- **Atomic booking:** RPCs `book_class`, `cancel_booking` (auto-promotes waitlist), `mark_subscription_paid` etc., all SECURITY DEFINER with row locks.
+- **RLS:** Enabled on every public table with role-aware policies (member/coach/admin via `current_user_role()` helper).
+- **Legacy:** FastAPI moved to `/app/backend_legacy_fastapi/` and disabled in supervisor (`autostart=false`); MongoDB also stopped.
+- **Frontend shim:** `src/api.ts` keeps the old `api("/path",{method,body})` call style and translates each path to the equivalent supabase-js call → no screen rewrites required.
 - Frontend: Expo SDK 54, expo-router. Single (tabs) group with role-conditional tabs (member: Home/Timetable/Bookings/Profile; coach: My Classes/Timetable/Bookings/Profile; admin: Dashboard/Members/Timetable/Manage/Profile). Stack screens: login, waiver, legal, notifications, checkin, guest/[classId].
 - Keyboard: react-native-keyboard-controller (KeyboardProvider + KeyboardAwareScrollView).
 

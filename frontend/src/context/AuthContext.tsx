@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { api, setToken, getToken } from "@/src/api";
+import { api, fetchMyProfile } from "@/src/api";
+import { supabase } from "@/src/supabase";
 
 export type User = {
   id: string;
@@ -33,20 +34,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
 
+  // Hydrate from any persisted Supabase session at startup.
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
-        const token = await getToken();
-        if (token) {
-          const me = await api<User>("/auth/me");
-          setUser(me);
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          const me = await fetchMyProfile();
+          if (!cancelled) setUser((me as User) || null);
         }
       } catch {
-        await setToken(null);
+        // ignore
       } finally {
-        setInitializing(false);
+        if (!cancelled) setInitializing(false);
       }
     })();
+
+    // Track future auth changes (token refresh, sign-out from elsewhere)
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        setUser(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -54,7 +68,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: "POST",
       body: { email, password },
     });
-    await setToken(res.token);
     setUser(res.user);
     return res.user;
   }, []);
@@ -65,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         body: { name, email, password, phone },
       });
-      await setToken(res.token);
       setUser(res.user);
       return res.user;
     },
@@ -73,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await setToken(null);
+    await supabase.auth.signOut();
     setUser(null);
   }, []);
 
@@ -81,7 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const me = await api<User>("/auth/me");
       setUser(me);
-    } catch {}
+    } catch {
+      // not authenticated — clear
+    }
   }, []);
 
   return (
