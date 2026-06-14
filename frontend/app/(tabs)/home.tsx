@@ -1,38 +1,65 @@
 import React, { useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, ImageBackground, RefreshControl, Alert } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api";
-import { Card, SectionTitle, Badge, EmptyState } from "@/src/components/UI";
+import { Card, SectionTitle, Badge, EmptyState, Btn, useToast } from "@/src/components/UI";
 import { C, SP, R, F, IMAGES, DAYS } from "@/src/theme";
 
 export default function Home() {
   const { user } = useAuth();
+  const toast = useToast();
   const insets = useSafeAreaInsets();
   const [bookings, setBookings] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [sub, setSub] = useState<any>(null);
+  const [plans, setPlans] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [requesting, setRequesting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [b, a, s, n] = await Promise.all([
+      const [b, a, s, n, p] = await Promise.all([
         api("/bookings/me"),
         api("/announcements"),
         api("/subscriptions/me"),
         api("/notifications"),
+        api("/plans"),
       ]);
       const today = new Date().toISOString().slice(0, 10);
       setBookings(b.filter((x: any) => ["booked", "waitlist"].includes(x.status) && x.date >= today).sort((p: any, q: any) => p.date.localeCompare(q.date)));
       setAnnouncements(a);
       setSub(s.find((x: any) => ["active", "frozen", "pending_payment"].includes(x.status)) || null);
       setUnread(n.unread);
+      setPlans(p);
     } catch {}
   }, []);
+
+  const requestPlan = (plan: any) => {
+    Alert.alert(
+      "Request this plan?",
+      `We'll let the admin know you'd like the ${plan.name} (€${Number(plan.price).toFixed(0)}/${plan.duration_days === 30 ? "month" : `${plan.duration_days}d`}). They'll confirm when payment is received.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Send request",
+          onPress: async () => {
+            setRequesting(plan.id);
+            try {
+              await api("/membership/request", { method: "POST", body: { plan_id: plan.id } });
+              toast.show("Request sent — admin will be in touch.", "success");
+            } catch (e: any) {
+              toast.show(e.message || "Could not send request", "error");
+            } finally { setRequesting(null); }
+          },
+        },
+      ],
+    );
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -111,9 +138,56 @@ export default function Home() {
               />
             </View>
           ) : (
-            <Text style={styles.subMeta}>No active membership. Ask at the front desk to get set up.</Text>
+            <View>
+              <Text style={styles.subMeta}>No active membership yet. Choose a plan below — admin will confirm once payment is received.</Text>
+            </View>
           )}
         </Card>
+
+        <SectionTitle>MEMBERSHIP PLANS</SectionTitle>
+        {plans.length === 0 ? (
+          <EmptyState text="No plans available — check back soon." />
+        ) : (
+          plans.map((p) => {
+            const hasActive = sub && (sub.status === "active" || sub.status === "frozen") && sub.plan_id === p.id;
+            const pending = sub && sub.status === "pending_payment" && sub.plan_id === p.id;
+            return (
+              <Card key={p.id} style={styles.planCard} testID={`plan-card-${p.id}`}>
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: SP.md }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.planName}>{p.name.toUpperCase()}</Text>
+                    {p.description ? <Text style={styles.planDesc}>{p.description}</Text> : null}
+                    <Text style={styles.planMeta}>
+                      {p.type === "class_pack" && p.sessions ? `${p.sessions} sessions • ` : ""}
+                      Valid {p.duration_days} days
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={styles.planPrice}>€{Number(p.price).toFixed(0)}</Text>
+                    <Text style={styles.planUnit}>
+                      {p.duration_days === 30 ? "/month" : p.duration_days === 7 ? "/week" : `/${p.duration_days}d`}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ marginTop: SP.md }}>
+                  {hasActive ? (
+                    <Btn small variant="outline" title="✓ YOUR CURRENT PLAN" onPress={() => {}} />
+                  ) : pending ? (
+                    <Btn small variant="outline" title="⏳ AWAITING PAYMENT" onPress={() => {}} />
+                  ) : (
+                    <Btn
+                      small
+                      testID={`request-plan-${p.id}`}
+                      title="REQUEST THIS PLAN"
+                      loading={requesting === p.id}
+                      onPress={() => requestPlan(p)}
+                    />
+                  )}
+                </View>
+              </Card>
+            );
+          })
+        )}
 
         <SectionTitle>ANNOUNCEMENTS</SectionTitle>
         {announcements.length === 0 ? (
@@ -187,4 +261,10 @@ const styles = StyleSheet.create({
   },
   dateDay: { fontFamily: F.body, fontSize: 10, color: C.onBrandTint, letterSpacing: 1 },
   dateNum: { fontFamily: F.display, fontSize: 18, color: C.onBrandTint },
+  planCard: { marginBottom: SP.sm },
+  planName: { fontFamily: F.display, fontSize: 18, color: C.onSurface, letterSpacing: 1 },
+  planDesc: { fontFamily: F.body, fontSize: 13, color: C.onSurface2, marginTop: 4, lineHeight: 18 },
+  planMeta: { fontFamily: F.body, fontSize: 11, color: C.onSurface3, marginTop: 6, letterSpacing: 0.5 },
+  planPrice: { fontFamily: F.display, fontSize: 32, color: C.brand, lineHeight: 36 },
+  planUnit: { fontFamily: F.body, fontSize: 11, color: C.onSurface3, letterSpacing: 0.5 },
 });

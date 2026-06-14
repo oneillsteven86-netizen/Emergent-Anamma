@@ -148,6 +148,12 @@ export async function api<T = any>(
     return data as any;
   }
 
+  if (path === "/membership/request" && m === "POST") {
+    const { data, error } = await supabase.rpc("request_membership", { p_plan_id: b.plan_id });
+    if (error) err(error);
+    return data as any;
+  }
+
   // ============ LEGAL / SETTINGS / PLANS / COACHES ============
   if (path === "/legal/waiver" && m === "GET") {
     const { data, error } = await supabase.rpc("legal_waiver");
@@ -191,6 +197,34 @@ export async function api<T = any>(
       .eq("status", "active");
     if (error) err(error);
     return (data || []) as any;
+  }
+
+  // ============ ROOMS ============
+  if (path === "/rooms" && m === "GET") {
+    const { data, error } = await supabase
+      .from("rooms").select("*").eq("archived", false).order("name");
+    if (error) err(error);
+    return (data || []) as any;
+  }
+  if (path === "/rooms" && m === "POST") {
+    const { data, error } = await supabase.from("rooms")
+      .insert({ name: b.name, capacity: b.capacity || null, notes: b.notes || "" })
+      .select().single();
+    if (error) err(error);
+    return data as any;
+  }
+  const roomM = path.match(/^\/rooms\/([\w-]+)$/);
+  if (roomM && m === "PUT") {
+    const upd: any = {};
+    for (const k of ["name", "capacity", "notes"]) if (b[k] !== undefined) upd[k] = b[k];
+    const { data, error } = await supabase.from("rooms").update(upd).eq("id", roomM[1]).select().single();
+    if (error) err(error);
+    return data as any;
+  }
+  if (roomM && m === "DELETE") {
+    const { error } = await supabase.from("rooms").update({ archived: true }).eq("id", roomM[1]);
+    if (error) err(error);
+    return { ok: true } as any;
   }
 
   // ============ SCHEDULE / CLASSES / PUBLIC ============

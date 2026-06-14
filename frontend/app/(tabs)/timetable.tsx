@@ -41,6 +41,7 @@ export default function Timetable() {
   const [classes, setClasses] = useState<any[]>([]);
   const [weekClasses, setWeekClasses] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [detail, setDetail] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -76,10 +77,13 @@ export default function Timetable() {
 
   const load = useCallback(async (d: string) => {
     try {
-      const [sched, all, co] = await Promise.all([api(`/schedule?date=${d}`), api("/classes"), api("/coaches")]);
+      const [sched, all, co, rms] = await Promise.all([
+        api(`/schedule?date=${d}`), api("/classes"), api("/coaches"), api("/rooms"),
+      ]);
       setClasses(sched);
       setWeekClasses(all);
       setCoaches(co);
+      setRooms(rms);
     } catch {}
   }, []);
 
@@ -117,12 +121,13 @@ export default function Timetable() {
 
   const openEdit = (c?: any, dayIdx?: number) => {
     setDetail(null);
+    const defaultRoom = rooms[0]?.name || "Main Mat";
     setForm(
       c
         ? { ...c }
         : {
             name: "", description: "", day_of_week: dayIdx ?? 0, start_time: "18:00",
-            duration_min: 60, room: "Main Mat", capacity: 20, coach_id: coaches[0]?.id,
+            duration_min: 60, room: defaultRoom, capacity: 20, coach_id: coaches[0]?.id,
           },
     );
     setEditOpen(true);
@@ -130,10 +135,11 @@ export default function Timetable() {
 
   const saveClass = async () => {
     if (!form.name) return toast.show("Class name required", "error");
+    if (!form.room) return toast.show("Pick a room", "error");
     try {
       const body = {
         name: form.name, description: form.description || "", day_of_week: Number(form.day_of_week),
-        start_time: form.start_time, duration_min: Number(form.duration_min) || 60, room: form.room || "Main Mat",
+        start_time: form.start_time, duration_min: Number(form.duration_min) || 60, room: form.room,
         capacity: Number(form.capacity) || 20, coach_id: form.coach_id, image: form.image || "",
       };
       if (form.id) await api(`/classes/${form.id}`, { method: "PUT", body });
@@ -416,7 +422,25 @@ export default function Timetable() {
           </View>
         </View>
 
-        <Input testID="class-room-input" label="Room" value={form.room} onChangeText={(v: string) => setForm({ ...form, room: v })} placeholder="Main Mat" />
+        <Text style={styles.label}>ROOM</Text>
+        <View style={{ height: 48, justifyContent: "center", marginBottom: SP.sm }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SP.sm }}>
+            {rooms.length === 0 ? (
+              <Text style={[styles.meta, { paddingHorizontal: SP.md }]}>No rooms — add them in Manage → Rooms first.</Text>
+            ) : rooms.map((r) => (
+              <Pressable key={r.id} testID={`room-pick-${r.id}`} onPress={() => setForm({ ...form, room: r.name })}
+                style={[styles.pickChip, form.room === r.name && styles.pickChipActive]}>
+                <Text style={[styles.pickText, form.room === r.name && { color: C.onBrand }]}>{r.name}</Text>
+              </Pressable>
+            ))}
+            {/* If the class was saved with a room that no longer exists in the catalogue, show it as a removable chip */}
+            {form.room && !rooms.find((r) => r.name === form.room) && (
+              <View style={[styles.pickChip, styles.pickChipActive]}>
+                <Text style={[styles.pickText, { color: C.onBrand }]}>{form.room} (legacy)</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
 
         <Text style={styles.label}>COACH</Text>
         <View style={{ height: 48, justifyContent: "center", marginBottom: SP.sm }}>

@@ -13,6 +13,7 @@ const PERMS: [string, string][] = [
   ["manage_timetable", "Manage timetable"],
   ["manage_members", "Manage members"],
   ["mark_attendance", "Mark attendance"],
+  ["take_payments", "Accept cash payments"],
   ["manage_private_sessions", "Manage private sessions"],
   ["send_announcements", "Send announcements"],
 ];

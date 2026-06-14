@@ -9,17 +9,20 @@ import { api } from "@/src/api";
 import { Btn, Input, Chip, Card, Sheet, useToast, SectionTitle } from "@/src/components/UI";
 import { C, SP, R, F } from "@/src/theme";
 
-const SECTIONS = ["Plans", "Announce", "Settings", "Media", "Exports"];
+const SECTIONS = ["Plans", "Rooms", "Announce", "Settings", "Media", "Exports"];
 
 export default function Manage() {
   const insets = useSafeAreaInsets();
   const toast = useToast();
   const [section, setSection] = useState("Plans");
   const [plans, setPlans] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>({});
   const [planOpen, setPlanOpen] = useState(false);
   const [pf, setPf] = useState<any>({});
+  const [roomOpen, setRoomOpen] = useState(false);
+  const [rf, setRf] = useState<any>({});
   const [annTitle, setAnnTitle] = useState("");
   const [annBody, setAnnBody] = useState("");
   const [annAudience, setAnnAudience] = useState<string>("all");
@@ -30,10 +33,11 @@ export default function Manage() {
 
   const load = useCallback(async () => {
     try {
-      const [p, s, c] = await Promise.all([api("/plans"), api("/settings"), api("/classes")]);
+      const [p, s, c, r] = await Promise.all([api("/plans"), api("/settings"), api("/classes"), api("/rooms")]);
       setPlans(p);
       setSettings(s);
       setClasses(c);
+      setRooms(r);
       setWindow(String(s.cancellation_window_hours ?? 2));
       setClubEmail(s.club_email || "");
       setPsPolicy(s.private_session_policy || "");
@@ -63,6 +67,36 @@ export default function Manage() {
     } catch (e: any) {
       toast.show(e.message, "error");
     }
+  };
+
+  const saveRoom = async () => {
+    if (!rf.name?.trim()) return toast.show("Room name required", "error");
+    const body: any = {
+      name: rf.name.trim(),
+      capacity: rf.capacity ? Number(rf.capacity) : null,
+      notes: rf.notes || "",
+    };
+    try {
+      if (rf.id) await api(`/rooms/${rf.id}`, { method: "PUT", body });
+      else await api("/rooms", { method: "POST", body });
+      toast.show("Room saved");
+      setRoomOpen(false);
+      load();
+    } catch (e: any) {
+      toast.show(e.message || "Could not save room", "error");
+    }
+  };
+
+  const removeRoom = async (r: any) => {
+    const inUse = classes.filter((c: any) => c.room === r.name).length;
+    if (inUse > 0) {
+      return toast.show(`Room is used by ${inUse} class${inUse === 1 ? "" : "es"}. Move them first.`, "error");
+    }
+    try {
+      await api(`/rooms/${r.id}`, { method: "DELETE" });
+      toast.show("Room removed");
+      load();
+    } catch (e: any) { toast.show(e.message, "error"); }
   };
 
   const sendAnn = async () => {
@@ -169,6 +203,36 @@ export default function Manage() {
           </View>
         )}
 
+        {section === "Rooms" && (
+          <View>
+            <Btn testID="add-room-button" title="+ NEW ROOM" onPress={() => { setRf({}); setRoomOpen(true); }} style={{ marginBottom: SP.lg }} />
+            {rooms.length === 0 && (
+              <Text style={styles.rowMeta}>No rooms yet — add your training spaces (e.g. Main Mat, Ring Room).</Text>
+            )}
+            {rooms.map((r) => {
+              const usage = classes.filter((c: any) => c.room === r.name).length;
+              return (
+                <Card key={r.id} style={styles.row} testID={`room-${r.id}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{r.name}</Text>
+                    <Text style={styles.rowMeta}>
+                      {usage} class{usage === 1 ? "" : "es"}
+                      {r.capacity ? ` • cap ${r.capacity}` : ""}
+                      {r.notes ? ` • ${r.notes}` : ""}
+                    </Text>
+                  </View>
+                  <Pressable testID={`edit-room-${r.id}`} onPress={() => { setRf(r); setRoomOpen(true); }} hitSlop={10}>
+                    <Ionicons name="pencil" size={18} color={C.brand} />
+                  </Pressable>
+                  <Pressable testID={`delete-room-${r.id}`} onPress={() => removeRoom(r)} hitSlop={10}>
+                    <Ionicons name="trash" size={18} color={C.error} />
+                  </Pressable>
+                </Card>
+              );
+            })}
+          </View>
+        )}
+
         {section === "Announce" && (
           <View>
             <Input testID="ann-title-input" label="Title" value={annTitle} onChangeText={setAnnTitle} placeholder="e.g. Christmas opening hours" />
@@ -266,6 +330,19 @@ export default function Manage() {
         )}
         <Input testID="plan-desc-input" label="Description" value={pf.description} onChangeText={(v: string) => setPf({ ...pf, description: v })} />
         <Btn testID="save-plan-button" title="SAVE PLAN" onPress={savePlan} />
+      </Sheet>
+
+      <Sheet visible={roomOpen} onClose={() => setRoomOpen(false)} title={rf.id ? "EDIT ROOM" : "NEW ROOM"}>
+        <Input testID="room-name-input" label="Room name" value={rf.name || ""}
+          onChangeText={(v: string) => setRf({ ...rf, name: v })}
+          placeholder="e.g. Main Mat, Ring Room, Cage" autoCapitalize="words" />
+        <Input testID="room-capacity-input" label="Default capacity (optional)" value={String(rf.capacity ?? "")}
+          onChangeText={(v: string) => setRf({ ...rf, capacity: v })} keyboardType="numeric"
+          placeholder="20" />
+        <Input testID="room-notes-input" label="Notes (optional)" value={rf.notes || ""}
+          onChangeText={(v: string) => setRf({ ...rf, notes: v })}
+          placeholder="e.g. Upstairs — boxing equipment only" />
+        <Btn testID="save-room-button" title="SAVE ROOM" onPress={saveRoom} />
       </Sheet>
     </View>
   );
