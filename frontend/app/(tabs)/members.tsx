@@ -380,6 +380,17 @@ export default function Members() {
             {/* danger zone */}
             {user?.role === "admin" && sel.role !== "admin" && (
               <View style={{ marginTop: SP.lg, gap: SP.sm }}>
+                {sel.role === "member" && (
+                  <Btn small title="PROMOTE TO COACH" variant="outline" testID="promote-coach-button"
+                    onPress={async () => {
+                      try {
+                        await api(`/users/${sel.id}/promote-coach`, { method: "POST" });
+                        toast.show(`${sel.name} is now a coach`);
+                        setSel(null);
+                        load();
+                      } catch (e: any) { toast.show(e.message, "error"); }
+                    }} />
+                )}
                 <Btn small title="PROMOTE TO ADMIN (HANDOVER)" variant="outline" testID="promote-admin-button"
                   onPress={async () => {
                     try {

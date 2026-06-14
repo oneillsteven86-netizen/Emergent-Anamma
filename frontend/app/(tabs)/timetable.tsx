@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, StyleSheet, ScrollView, FlatList, Pressable, Share, RefreshControl } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { View, Text, StyleSheet, ScrollView, FlatList, Pressable, Share, RefreshControl, Platform } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { useFocusEffect, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -45,6 +46,33 @@ export default function Timetable() {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<any>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [roster, setRoster] = useState<{ open: boolean; cls: any | null; rows: any[]; loading: boolean }>({
+    open: false, cls: null, rows: [], loading: false,
+  });
+
+  const canSeeRoster = !!(user && (user.role === "admin" || user.role === "coach"
+    || user.permissions?.mark_attendance || user.permissions?.manage_members));
+
+  const openRoster = async (c: any) => {
+    setRoster({ open: true, cls: c, rows: [], loading: true });
+    try {
+      const rows = await api(`/classes/${c.id}/roster?date=${c.date || date}`);
+      setRoster({ open: true, cls: c, rows, loading: false });
+    } catch (e: any) {
+      toast.show(e.message || "Failed to load roster", "error");
+      setRoster({ open: false, cls: null, rows: [], loading: false });
+    }
+  };
+
+  const copyGuestLink = async (c: any) => {
+    const link = `${BASE_URL}/guest/${c.id}`;
+    try {
+      await Clipboard.setStringAsync(link);
+      toast.show("Booking link copied", "success");
+    } catch {
+      toast.show(link, "info");
+    }
+  };
 
   const load = useCallback(async (d: string) => {
     try {
@@ -264,7 +292,20 @@ export default function Timetable() {
               </View>
             )}
             <View style={{ gap: SP.sm, marginTop: SP.lg }}>
-              <Btn small variant="outline" testID="share-guest-link-button" title="SHARE GUEST BOOKING LINK" onPress={() => shareGuestLink(detail)} />
+              <View style={{ flexDirection: "row", gap: SP.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Btn small variant="outline" testID="copy-guest-link-button" title="📋 COPY LINK" onPress={() => copyGuestLink(detail)} />
+                </View>
+                {Platform.OS !== "web" && (
+                  <View style={{ flex: 1 }}>
+                    <Btn small variant="outline" testID="share-guest-link-button" title="SHARE" onPress={() => shareGuestLink(detail)} />
+                  </View>
+                )}
+              </View>
+              {canSeeRoster && detail.date && (
+                <Btn small variant="outline" testID="view-roster-button" title="👥 VIEW BOOKED MEMBERS"
+                  onPress={() => openRoster(detail)} />
+              )}
               {canManage && (
                 <>
                   <Btn small variant="outline" testID="edit-class-button" title="EDIT CLASS" onPress={() => openEdit(detail)} />
@@ -278,7 +319,56 @@ export default function Timetable() {
         )}
       </Sheet>
 
-      {/* add/edit class — tap-based pickers, no typing needed for time/duration/capacity */}
+      {/* roster sheet (coach/admin) */}
+      <Sheet
+        visible={roster.open}
+        onClose={() => setRoster({ open: false, cls: null, rows: [], loading: false })}
+        title={roster.cls ? `${roster.cls.name} — ${roster.cls.date || date}` : "Roster"}
+      >
+        {roster.loading ? (
+          <Text style={styles.meta}>Loading…</Text>
+        ) : roster.rows.length === 0 ? (
+          <EmptyState text="No bookings yet for this class." />
+        ) : (
+          <View style={{ gap: SP.xs }}>
+            <Text style={[styles.meta, { marginBottom: SP.sm }]}>
+              {roster.rows.filter((r: any) => r.status === "booked" || r.status === "attended").length} booked
+              {(() => {
+                const wl = roster.rows.filter((r: any) => r.status === "waitlist").length;
+                return wl ? ` • ${wl} on waitlist` : "";
+              })()}
+            </Text>
+            {roster.rows.map((r: any, i: number) => (
+              <View key={r.id} style={styles.rosterRow}>
+                <Text style={styles.rosterIdx}>{String(i + 1).padStart(2, "0")}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rosterName}>
+                    {r.user_name}{r.guest_email ? "  (guest)" : ""}
+                  </Text>
+                  {r.guest_email ? <Text style={styles.rosterEmail}>{r.guest_email}</Text> : null}
+                </View>
+                <Badge
+                  text={r.status === "attended" ? "✓ In" : r.status === "waitlist" ? "Waitlist" : r.status === "no_show" ? "No-show" : "Booked"}
+                  tone={r.status === "attended" ? "success" : r.status === "waitlist" ? "warning" : r.status === "no_show" ? "error" : "default"}
+                />
+              </View>
+            ))}
+            {canSeeRoster && roster.cls && (
+              <Btn
+                small
+                variant="primary"
+                title="🗒️ MARK ATTENDANCE"
+                onPress={() => {
+                  const d = roster.cls.date || date;
+                  const cid = roster.cls.id;
+                  setRoster({ open: false, cls: null, rows: [], loading: false });
+                  router.push(`/checkin?classId=${cid}&date=${d}`);
+                }}
+              />
+            )}
+          </View>
+        )}
+      </Sheet>
       <Sheet visible={editOpen} onClose={() => setEditOpen(false)} title={form.id ? "EDIT CLASS" : `ADD CLASS — ${FULL_DAYS[form.day_of_week ?? 0]?.toUpperCase() || ""}`}>
         <Input testID="class-name-input" label="Class name" value={form.name} onChangeText={(v: string) => setForm({ ...form, name: v })} placeholder="e.g. K1 Kickboxing" />
 
@@ -416,4 +506,12 @@ const styles = StyleSheet.create({
   stepper: { flexDirection: "row", alignItems: "center", gap: SP.md, backgroundColor: C.surface3, borderRadius: R.pill, padding: 4 },
   stepBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.surface2, alignItems: "center", justifyContent: "center" },
   stepVal: { fontFamily: F.display, fontSize: 20, color: C.onSurface, minWidth: 32, textAlign: "center" },
+  // roster
+  rosterRow: {
+    flexDirection: "row", alignItems: "center", gap: SP.md, backgroundColor: C.surface2,
+    borderRadius: R.md, borderWidth: 1, borderColor: C.border, paddingHorizontal: SP.md, paddingVertical: 10,
+  },
+  rosterIdx: { fontFamily: F.display, fontSize: 14, color: C.onSurface3, width: 26 },
+  rosterName: { fontFamily: F.bodyBold, fontSize: 14, color: C.onSurface },
+  rosterEmail: { fontFamily: F.body, fontSize: 11, color: C.onSurface3 },
 });

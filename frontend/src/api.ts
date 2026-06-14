@@ -132,6 +132,22 @@ export async function api<T = any>(
     return data as any;
   }
 
+  if (path === "/auth/request-password-reset" && m === "POST") {
+    const { data, error } = await supabase.rpc("request_password_reset", {
+      p_email: String(b.email).toLowerCase(),
+    });
+    if (error) err(error);
+    return data as any;
+  }
+
+  if (path === "/auth/reset-password" && m === "POST") {
+    const { data, error } = await supabase.rpc("reset_password", {
+      p_token: b.token, p_new_password: b.password,
+    });
+    if (error) err(error);
+    return data as any;
+  }
+
   // ============ LEGAL / SETTINGS / PLANS / COACHES ============
   if (path === "/legal/waiver" && m === "GET") {
     const { data, error } = await supabase.rpc("legal_waiver");
@@ -310,6 +326,12 @@ export async function api<T = any>(
   const promoteM = path.match(/^\/users\/([\w-]+)\/promote-admin$/);
   if (promoteM && m === "POST") {
     const { data, error } = await supabase.rpc("promote_to_admin", { p_user_id: promoteM[1] });
+    if (error) err(error);
+    return data as any;
+  }
+  const promoteCoachM = path.match(/^\/users\/([\w-]+)\/promote-coach$/);
+  if (promoteCoachM && m === "POST") {
+    const { data, error } = await supabase.rpc("promote_to_coach", { p_user_id: promoteCoachM[1] });
     if (error) err(error);
     return data as any;
   }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ImageBackground, Pressable, Platform } from "react-native";
+import { View, Text, StyleSheet, ImageBackground, Pressable, Modal } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +20,9 @@ export default function Login() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [bg, setBg] = useState(IMAGES.hero);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
     api("/settings")
@@ -111,11 +114,74 @@ export default function Login() {
             onPress={submit}
             loading={loading}
           />
+          {mode === "login" && (
+            <Pressable
+              testID="forgot-password-link"
+              onPress={() => { setResetEmail(email); setResetOpen(true); }}
+              style={{ marginTop: SP.md, alignItems: "center" }}
+            >
+              <Text style={styles.forgot}>Forgot your password?</Text>
+            </Pressable>
+          )}
           <Pressable testID="legal-link" onPress={() => router.push("/legal")} style={{ marginTop: SP.lg, alignItems: "center" }}>
             <Text style={styles.legal}>Terms of Service & Privacy Policy</Text>
           </Pressable>
         </View>
       </KeyboardAwareScrollView>
+
+      <Modal
+        visible={resetOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setResetOpen(false)}
+      >
+        <View style={styles.modalBg}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Reset password</Text>
+            <Text style={styles.modalSub}>
+              Enter your email — if it matches an account, we&apos;ll send you a link to set a new password.
+            </Text>
+            <Input
+              testID="reset-email-input"
+              label="Email"
+              value={resetEmail}
+              onChangeText={setResetEmail}
+              placeholder="you@email.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <View style={{ flexDirection: "row", gap: SP.md, marginTop: SP.md }}>
+              <View style={{ flex: 1 }}>
+                <Btn
+                  title="Cancel"
+                  onPress={() => setResetOpen(false)}
+                  variant="ghost"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Btn
+                  testID="reset-submit-button"
+                  title="Send link"
+                  loading={resetBusy}
+                  onPress={async () => {
+                    if (!resetEmail.trim()) { toast.show("Enter your email", "error"); return; }
+                    setResetBusy(true);
+                    try {
+                      await api("/auth/request-password-reset", { method: "POST", body: { email: resetEmail.trim() } });
+                      toast.show("If that email is registered, a reset link is on its way.", "success");
+                      setResetOpen(false);
+                    } catch (e: any) {
+                      toast.show(e.message || "Could not send reset link", "error");
+                    } finally {
+                      setResetBusy(false);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ImageBackground>
   );
 }
@@ -137,4 +203,9 @@ const styles = StyleSheet.create({
   toggleText: { fontFamily: F.bodyBold, fontSize: 13, color: C.onSurface3, letterSpacing: 1 },
   toggleTextActive: { color: C.onBrand },
   legal: { color: C.onSurface3, fontFamily: F.body, fontSize: 12, textDecorationLine: "underline" },
+  forgot: { color: C.brand, fontFamily: F.bodyBold, fontSize: 13, letterSpacing: 0.6 },
+  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "center", padding: SP.xl },
+  modalCard: { backgroundColor: C.surface2, borderRadius: R.lg, padding: SP.xl, borderWidth: 1, borderColor: C.border },
+  modalTitle: { fontFamily: F.display, fontSize: 24, color: C.onSurface, letterSpacing: 2, marginBottom: SP.sm },
+  modalSub: { fontFamily: F.body, fontSize: 13, color: C.onSurface3, marginBottom: SP.lg, lineHeight: 18 },
 });
