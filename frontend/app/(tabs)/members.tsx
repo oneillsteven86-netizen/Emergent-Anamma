@@ -71,6 +71,50 @@ export default function Members() {
   const subFor = (uid: string) =>
     subs.find((s) => s.user_id === uid && ["active", "frozen", "pending_payment"].includes(s.status));
 
+  // Most recent subscription (any status) — used as the "default plan" for a quick renew
+  const latestSubFor = (uid: string) =>
+    subs
+      .filter((s) => s.user_id === uid)
+      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+
+  // Quick-renew confirmation sheet state
+  const [renewSheet, setRenewSheet] = useState<{ member: any; target: any; isMarkPaid: boolean } | null>(null);
+  const [renewBusy, setRenewBusy] = useState(false);
+
+  const quickRenew = (member: any) => {
+    const pending = subs.find((s) => s.user_id === member.id && s.status === "pending_payment");
+    const latest = latestSubFor(member.id);
+    const target = pending || latest;
+    if (!target) {
+      toast.show("No previous plan — open the member to assign one.", "info");
+      return;
+    }
+    setRenewSheet({ member, target, isMarkPaid: !!pending });
+  };
+
+  const confirmRenew = async () => {
+    if (!renewSheet) return;
+    const { member, target, isMarkPaid } = renewSheet;
+    setRenewBusy(true);
+    try {
+      if (isMarkPaid) {
+        await api(`/subscriptions/${target.id}/mark-paid`, { method: "POST" });
+      } else {
+        await api("/subscriptions", {
+          method: "POST",
+          body: { user_id: member.id, plan_id: target.plan_id, mark_paid: true },
+        });
+      }
+      toast.show("Payment recorded ✓");
+      setRenewSheet(null);
+      load();
+    } catch (e: any) {
+      toast.show(e.message || "Could not record payment", "error");
+    } finally {
+      setRenewBusy(false);
+    }
+  };
+
   const open = async (u: any) => {
     setSel(u);
     setNotes(u.admin_notes || "");
@@ -244,6 +288,13 @@ export default function Members() {
         ListEmptyComponent={<EmptyState icon="people-outline" text="No members found." />}
         renderItem={({ item }) => {
           const s = item.role === "member" ? subFor(item.id) : null;
+          const latest = item.role === "member" ? latestSubFor(item.id) : null;
+          // Show quick-renew when: there's a pending payment OR the most recent sub exists & isn't active/frozen
+          const canQuickRenew =
+            item.role === "member" &&
+            (!!subs.find((x) => x.user_id === item.id && x.status === "pending_payment") ||
+              (latest && !["active", "frozen"].includes(latest.status)));
+          const isUnpaid = !!s && s.status === "pending_payment";
           return (
             <Pressable testID={`member-row-${item.id}`} style={styles.row} onPress={() => open(item)}>
               <View style={styles.avatar}>
@@ -261,6 +312,16 @@ export default function Members() {
               </View>
               {item.deletion_requested && <Badge text="GDPR" tone="error" />}
               {item.role === "member" && s?.status === "pending_payment" && <Badge text="€ due" tone="warning" />}
+              {canQuickRenew && (
+                <Pressable
+                  testID={`quick-renew-${item.id}`}
+                  onPress={(e) => { e.stopPropagation(); quickRenew(item); }}
+                  hitSlop={8}
+                  style={styles.quickRenewBtn}
+                >
+                  <Ionicons name={isUnpaid ? "cash-outline" : "refresh"} size={20} color={C.brand} />
+                </Pressable>
+              )}
               <Badge
                 text={item.role === "coach" ? "Coach" : item.role === "admin" ? "Admin" : item.status}
                 tone={item.role !== "member" ? "gold" : item.status === "active" ? "success" : item.status === "pending" ? "warning" : "neutral"}
@@ -551,6 +612,41 @@ export default function Members() {
         )}
       </Sheet>
 
+      {/* ---------- QUICK RENEW CONFIRM ---------- */}
+      <Sheet
+        visible={!!renewSheet}
+        onClose={() => setRenewSheet(null)}
+        title={renewSheet?.isMarkPaid ? "MARK CASH PAYMENT" : "RENEW MEMBERSHIP"}
+      >
+        {renewSheet && (
+          <View>
+            <View style={styles.renewBox} testID="renew-confirm-box">
+              <Text style={styles.renewName}>{renewSheet.member.name}</Text>
+              <Text style={styles.renewPlan}>{renewSheet.target.plan_name}</Text>
+              <Text style={styles.renewPrice}>€{Number(renewSheet.target.price).toFixed(0)}</Text>
+              <Text style={styles.rowMeta}>
+                {renewSheet.isMarkPaid
+                  ? "Mark the existing unpaid membership as paid. A receipt will be issued and the membership activated."
+                  : `Start a new ${renewSheet.target.plan_name} for ${renewSheet.member.name} and mark it as paid (cash). A new receipt will be issued.`}
+              </Text>
+            </View>
+            <Btn
+              testID="confirm-renew-button"
+              title={renewSheet.isMarkPaid ? "MARK PAID" : "RENEW + MARK PAID"}
+              onPress={confirmRenew}
+              loading={renewBusy}
+            />
+            <Btn
+              testID="cancel-renew-button"
+              variant="outline"
+              title="CANCEL"
+              onPress={() => setRenewSheet(null)}
+              style={{ marginTop: SP.sm }}
+            />
+          </View>
+        )}
+      </Sheet>
+
       {/* ---------- ADD COACH ---------- */}
       <Sheet visible={coachOpen} onClose={() => setCoachOpen(false)} title="ADD COACH">
         <Input testID="coach-name-input" label="Name" value={cName} onChangeText={setCName} placeholder="Coach name" />
@@ -631,4 +727,15 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16, backgroundColor: C.surface3,
     alignItems: "center", justifyContent: "center",
   },
+  quickRenewBtn: {
+    width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center",
+    backgroundColor: C.surface3, borderWidth: 1, borderColor: C.brand,
+  },
+  renewBox: {
+    alignItems: "center", gap: 4, backgroundColor: C.surface3, borderRadius: R.lg,
+    padding: SP.xl, marginBottom: SP.lg,
+  },
+  renewName: { fontFamily: F.display, fontSize: 22, color: C.onSurface, letterSpacing: 1 },
+  renewPlan: { fontFamily: F.body, fontSize: 14, color: C.onSurface2 },
+  renewPrice: { fontFamily: F.display, fontSize: 40, color: C.brand, marginVertical: SP.sm },
 });
