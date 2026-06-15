@@ -310,7 +310,6 @@ export default function Members() {
                     : item.email}
                 </Text>
               </View>
-              {item.deletion_requested && <Badge text="GDPR" tone="error" />}
               {item.role === "member" && s?.status === "pending_payment" && <Badge text="€ due" tone="warning" />}
               {canQuickRenew && (
                 <Pressable
@@ -500,7 +499,6 @@ export default function Members() {
                   tone={currentSub.status === "active" ? "success" : currentSub.status === "pending_payment" ? "warning" : "neutral"}
                 />
               )}
-              {sel.deletion_requested && <Badge text="GDPR DELETE REQUESTED" tone="error" />}
             </View>
 
             {sel.status === "pending" && (

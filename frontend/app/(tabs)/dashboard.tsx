@@ -65,10 +65,6 @@ export default function Dashboard() {
             <Text style={styles.miniValue}>{data?.attendance_today ?? "—"}</Text>
             <Text style={styles.statLabel}>CHECKED IN TODAY</Text>
           </Card>
-          <Card style={{ flex: 1, alignItems: "center" }} testID="stat-gdpr">
-            <Text style={[styles.miniValue, (data?.deletion_requests || 0) > 0 && { color: C.error }]}>{data?.deletion_requests ?? "—"}</Text>
-            <Text style={styles.statLabel}>GDPR REQUESTS</Text>
-          </Card>
         </View>
 
         <SectionTitle>TODAY&apos;S CLASSES</SectionTitle>

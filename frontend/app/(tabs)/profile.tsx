@@ -71,15 +71,6 @@ export default function Profile() {
     });
   };
 
-  const requestDeletion = async () => {
-    try {
-      await api("/auth/request-deletion", { method: "POST" });
-      toast.show("Deletion request sent to the club (GDPR)");
-    } catch (e: any) {
-      toast.show(e.message, "error");
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + SP.md }]}>
